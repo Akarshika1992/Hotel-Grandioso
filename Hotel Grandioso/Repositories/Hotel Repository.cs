@@ -49,6 +49,25 @@ public class HotelRepository
         await _context.SaveChangesAsync();
     }
 
+    
+    // Kollar först om rummet är upptaget under perioden. Två bokningar överlappar
+    // när var och en börjar innan den andra slutar (strikta < och > gör att
+    // // utcheckning och incheckning samma dag är tillåtet).
+    public async Task<bool> TryAddBookingAsync(Booking booking)
+    {
+        bool upptaget = await _context.Bookings.AnyAsync(b =>
+            b.RoomId == booking.RoomId &&
+            b.CheckIn < booking.CheckOut &&
+            b.CheckOut > booking.CheckIn);
+
+        if (upptaget)
+            return false;
+
+        _context.Bookings.Add(booking);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+    
 // "Aktuella" = bokningar som inte redan är avslutade, därför CheckOut > today.
 // Include behövs för att visa gästens namn och rumstyp i listan.
 

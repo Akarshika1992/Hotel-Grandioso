@@ -1,8 +1,8 @@
 # Hotel Grandioso
 
-Ett bokningssystem för Hotel Grandioso som ersätter det gamla Excel-arket. Programmet är en konsolapp i C# som använder EF Core (Code First) och SQLite.
+Det här är ett bokningsprogram för Hotel Grandioso. Det ersätter det gamla Excel-arket. Programmet körs i konsolen och är skrivet i C# med EF Core och SQLite.
 
-## Så kör du projektet
+## Så här kör du programmet
 
 Du behöver .NET 10 SDK.
 
@@ -12,21 +12,15 @@ cd "Hotel-Grandioso/Hotel Grandioso"
 dotnet run
 ```
 
-Databasen skapas automatiskt första gången man startar programmet. Då läggs hotellets 15 rum och spabehandlingarna in. Migrationerna ligger i mappen `Migrations`.
+Databasen skapas av sig själv första gången du startar programmet. Då läggs hotellets 15 rum in. Migrationerna finns i mappen `Migrations`.
 
 ## Vad programmet kan göra
 
-1. Boka rum (jag räknar ut totalpriset, antal nätter gånger pris per natt)
-2. Avboka en bokning
-3. Visa alla aktuella bokningar
-4. Visa alla rum med typ och pris
-
-<!--
-VG, ta bort kommentaren när det är klart:
-- Förhindra dubbelbokning
-- Visa lediga rum för ett datumintervall
-- Boka spa
--->
+1. Boka rum. Programmet räknar ut totalpriset (antal nätter gånger pris per natt).
+2. Avboka en bokning.
+3. Visa alla bokningar som inte är slut än.
+4. Visa alla rum med typ och pris.
+5. Programmet stoppar dubbelbokning. Samma rum kan inte bokas två gånger för samma datum.
 
 ## UML-diagram
 
@@ -77,35 +71,32 @@ classDiagram
     Treatment "1" --> "*" SpaBooking
 ```
 
-### Relationerna
+### Varför relationerna ser ut så här
 
-- En rumstyp har många rum. Jag gjorde RoomType till en egen tabell så att namn och beskrivning inte behöver skrivas om på varje rum. Storlek och pris ligger på Room, för två Standard-rum på olika våningar har olika storlek och pris.
-- Ett rum kan ha många bokningar (över tid), men en bokning gäller bara ett rum.
-- En gäst kan ha många bokningar, men en bokning har en gäst. Booking kopplar alltså ihop en gäst med ett rum och två datum.
-- En gäst kan ha många spabokningar och en behandling kan bokas många gånger. SpaBooking kopplar ihop gäst och behandling med en tid.
-- Jag använder DateOnly för in- och utcheckning eftersom man bokar hela dagar, och DateTime för spa eftersom man bokar en tid.
+- En rumstyp har många rum. Jag gjorde en egen tabell för rumstyp, så att namnet och beskrivningen bara finns på ett ställe. Storlek och pris ligger på rummet, för rummen på olika våningar har olika storlek och pris.
+- Ett rum kan bokas många gånger, men varje bokning gäller bara ett rum.
+- En gäst kan göra många bokningar, men varje bokning har bara en gäst. Bokningen kopplar ihop en gäst med ett rum och två datum.
+- Spabokningen kopplar ihop en gäst med en behandling och en tid. Många gäster kan boka samma behandling.
+- Jag använder DateOnly för in- och utcheckning, eftersom man bokar hela dagar. För spa använder jag DateTime, eftersom man bokar en tid.
 
 ## Hur koden är uppdelad
 
-- **Models**: klasserna för entiteterna.
-- **Data/HotelContext**: EF Core-inställningar, unika index och startdata.
-- **Repositories/HotelRepository**: all kod som pratar med databasen.
-- **Services/BookingService**: reglerna, t.ex. att utcheckning måste vara efter incheckning, och prisberäkningen.
-- **UI/ConsoleMenu**: menyn, den skriver och läser bara i konsolen.
-- **Program.cs**: skapar objekten och startar menyn.
+- Models: klasserna som beskriver datan.
+- Data/HotelContext: inställningar för databasen och startdata (rum och behandlingar).
+- Repositories/HotelRepository: all kod som pratar med databasen.
+- Services/BookingService: reglerna, till exempel att utcheckning måste vara efter incheckning. Här räknas också priset ut.
+- UI/ConsoleMenu: menyn. Den skriver och läser bara i konsolen.
+- Program.cs: skapar objekten och startar menyn.
 
 ## Repository
 
-HotelRepository är klassen som gör allt arbete mot databasen. Den hämtar rum, hittar eller skapar gäster, sparar och tar bort bokningar och hämtar aktuella bokningar. Allt görs med LINQ, inga SQL-strängar.
+HotelRepository är klassen som gör allt jobb mot databasen. Den hämtar rum, hittar eller skapar gäster, sparar och tar bort bokningar och hämtar bokningar. Den kollar också om ett rum redan är bokat innan en bokning sparas. Allt görs med LINQ, jag har ingen SQL-text i koden.
 
-Jag gjorde så här för att menyn och servicen inte ska behöva känna till EF Core. Då ligger alla databasfrågor på ett ställe, och om jag vill ändra en fråga behöver jag bara ändra på ett ställe.
-
-<!--
-VG, ta bort kommentaren när dubbelbokningsskyddet är klart:
+Jag gjorde så för att menyn och servicen inte ska behöva veta hur databasen fungerar. Alla frågor till databasen ligger på ett ställe, så om jag vill ändra något behöver jag bara ändra där.
 
 ## Dubbelbokning
 
-Innan en bokning sparas kollar jag om rummet redan är bokat under de datumen:
+Innan en bokning sparas kollar programmet om rummet redan är bokat de datumen:
 
 ```csharp
 bool upptaget = await _context.Bookings.AnyAsync(b =>
@@ -114,17 +105,22 @@ bool upptaget = await _context.Bookings.AnyAsync(b =>
     b.CheckOut > booking.CheckIn);
 ```
 
-Två bokningar överlappar om båda börjar innan den andra slutar. AnyAsync ger true om det finns någon sådan bokning för rummet, och då sparas inte den nya. Jag använder < och > (inte <= och >=) så att en gäst kan checka in samma dag som en annan checkar ut.
--->
+Två bokningar krockar om båda börjar innan den andra slutar. `AnyAsync` svarar true om det finns minst en sådan bokning för samma rum. Då sparas inte den nya bokningen och användaren får ett felmeddelande.
+
+Jag använder `<` och `>` och inte `<=` och `>=`. Då kan en gäst checka in samma dag som en annan gäst checkar ut.
+
+Exempel: rummet är bokat 15 till 18 december.
+- 16 till 20 december krockar och nekas.
+- 18 till 20 december krockar inte och är okej.
 
 ## GDPR
 
-Jag har gått igenom fälten på Guest som hotellchefen ville ha. Jag utgår från att man bara ska spara det man faktiskt behöver (dataminimering).
+Jag har tittat på fälten som hotellchefen ville ha på gästen. Jag sparar bara det som behövs för en bokning. Det kallas dataminimering.
 
-- **Name**: behåller jag. Man måste veta vem som har bokat.
-- **Email**: lade jag till själv. Hotellet behöver kunna skicka bokningsbekräftelse, och med e-post kan man skilja två gäster med samma namn åt.
-- **HairColor**: tar bort. Hårfärg har inget med en bokning att göra.
-- **HeightCm**: tar bort. Längd behövs inte för att boka rum, och det är bara en onödig personuppgift att skydda.
-- **Religion**: tar bort. Religion är känsliga personuppgifter enligt GDPR (artikel 9) och det är i princip förbjudet att spara dem utan uttryckligt samtycke. Det behövs inte för en bokning och skulle vara allvarligt om det läckte. Om hotellet vill erbjuda t.ex. ett bönerum kan gästen skriva ett önskemål vid bokningen istället, utan att religionen sparas på gästen.
+- Name: jag behåller det. Hotellet måste veta vem som har bokat.
+- Email: jag lade till det själv. Hotellet behöver kunna skicka en bekräftelse. Med e-post kan man också skilja två gäster med samma namn åt.
+- HairColor: jag tar bort det. Hårfärg har ingenting med en bokning att göra.
+- HeightCm: jag tar bort det. Längd behövs inte för att boka ett rum. Det är bara en onödig uppgift som hotellet måste skydda.
+- Religion: jag tar bort det. Religion är en känslig personuppgift i GDPR (artikel 9) och man får i princip inte spara den utan tydligt samtycke. Hotellet behöver den inte för en bokning, och det vore allvarligt om den läckte. Om hotellet vill erbjuda till exempel ett bönerum kan gästen skriva ett önskemål när hen bokar, utan att religionen sparas.
 
-Jag valde också att en avbokning tar bort bokningen helt, så att vi inte sparar uppgifter om en bokning som aldrig blev av.
+När man avbokar tar programmet bort bokningen helt. Då sparar vi inte uppgifter om en bokning som aldrig blev av.

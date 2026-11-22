@@ -43,7 +43,9 @@ public class BookingService
             CheckIn = checkIn,
             CheckOut = checkOut
         };
-        await _repository.AddBookingAsync(booking);
+        bool ok = await _repository.TryAddBookingAsync(booking);
+        if (!ok)
+            return new BookingResult(false, $"Rum {roomNumber} är redan bokat under den perioden.");
 
         var total = CalculateTotalPrice(room, checkIn, checkOut);
         return new BookingResult(true, "Bokning bekräftad!", total);
