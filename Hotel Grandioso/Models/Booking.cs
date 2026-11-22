@@ -8,6 +8,7 @@ public class Booking
     public int RoomId { get; set; }
     public Room Room { get; set; } = null!;
 
+    // DateOnly eftersom en hotellvistelse gäller hela dagar, inte klockslag.
     public DateOnly CheckIn { get; set; }
     public DateOnly CheckOut { get; set; }
 }
